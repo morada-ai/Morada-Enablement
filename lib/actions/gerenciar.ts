@@ -18,7 +18,6 @@ type PublishInput = {
   status: "draft" | "published";
   publishToNovidades: boolean;
   notifySlack: boolean;
-  isRequired: boolean;
 };
 
 function inferLessonKind(upload: PublishInput["upload"], externalUrl: string | null): LessonKind {
@@ -140,7 +139,13 @@ export async function createTrack(productId: string, featureId: string | null, n
 
 export async function updateTrackMeta(
   trackId: string,
-  input: { ownerName: string; ownerRole: string; comingSoon: boolean; featureId: string | null },
+  input: {
+    ownerName: string;
+    ownerRole: string;
+    comingSoon: boolean;
+    featureId: string | null;
+    requiredTeams: string[];
+  },
 ) {
   const { supabase } = await requireAdmin();
 
@@ -158,9 +163,22 @@ export async function updateTrackMeta(
     .eq("id", trackId);
   if (error) throw new Error(error.message);
 
+  // Replace-all: simplest way to keep the set exactly in sync with what was
+  // picked, no need to diff added/removed teams.
+  const { error: deleteError } = await supabase.from("track_required_teams").delete().eq("track_id", trackId);
+  if (deleteError) throw new Error(deleteError.message);
+  if (input.requiredTeams.length > 0) {
+    const { error: insertError } = await supabase
+      .from("track_required_teams")
+      .insert(input.requiredTeams.map((team) => ({ track_id: trackId, team })));
+    if (insertError) throw new Error(insertError.message);
+  }
+
   revalidatePath("/trilhas");
   revalidatePath(`/trilhas/${trackId}`);
   revalidatePath("/gerenciar");
+  revalidatePath("/gerenciar/usuarios");
+  revalidatePath("/lideranca");
   revalidatePath("/");
   if (current?.product_id && current.feature_id) {
     revalidatePath(`/materiais/${current.product_id}/${current.feature_id}`);
@@ -268,7 +286,7 @@ export async function publishContent(input: PublishInput) {
     });
     if (error) throw new Error(error.message);
 
-    const trackUpdate: Record<string, unknown> = { is_required: input.isRequired, updated_at: new Date().toISOString() };
+    const trackUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
     // A published lesson means the trilha has real content now — drop the
     // "em preparação" flag automatically instead of relying on the admin to
     // remember to flip it by hand, and stamp content_updated_at (not the

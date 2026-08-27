@@ -1,6 +1,7 @@
-import { IconAlertTriangle, IconMoodEmpty, IconUserOff } from "@tabler/icons-react";
+import { IconAlertTriangle, IconClockExclamation, IconMoodEmpty, IconUserOff } from "@tabler/icons-react";
 import { Badge } from "@/niemeyer/components";
 import type { DirectoryUser, TrackSummary } from "@/lib/queries/users";
+import { isOverdue, isRequiredForTeam, requiredSince, REQUIRED_TRACK_DEADLINE_DAYS } from "@/lib/required-tracks";
 
 const INACTIVE_DAYS = 14;
 
@@ -19,12 +20,13 @@ function displayName(user: DirectoryUser) {
 type TrackRow = {
   id: string;
   title: string;
-  isRequired: boolean;
+  isRequiredForAnyone: boolean;
   totalPeople: number;
   completed: number;
   inProgress: number;
   notStarted: number;
   pendingRequired: DirectoryUser[];
+  overdue: DirectoryUser[];
 };
 
 function StackedBar({ completed, inProgress, notStarted }: { completed: number; inProgress: number; notStarted: number }) {
@@ -72,6 +74,7 @@ export function TeamInsights({ users, tracks }: { users: DirectoryUser[]; tracks
       let rowCompleted = 0;
       let rowInProgress = 0;
       const pendingRequired: DirectoryUser[] = [];
+      const overdue: DirectoryUser[] = [];
       for (const user of users) {
         const progress = user.tracks.find((x) => x.trackId === t.id);
         const done = progress?.done ?? 0;
@@ -79,23 +82,33 @@ export function TeamInsights({ users, tracks }: { users: DirectoryUser[]; tracks
           rowCompleted++;
         } else {
           if (done > 0) rowInProgress++;
-          if (t.isRequired) pendingRequired.push(user);
+          if (isRequiredForTeam(t.requiredTeams, user.team)) {
+            pendingRequired.push(user);
+            const since = requiredSince(t.requiredTeams, user.team);
+            if (isOverdue(since, user.createdAt, done, t.totalLessons)) overdue.push(user);
+          }
         }
       }
       return {
         id: t.id,
         title: t.title,
-        isRequired: t.isRequired,
+        isRequiredForAnyone: t.requiredTeams.length > 0,
         totalPeople: total,
         completed: rowCompleted,
         inProgress: rowInProgress,
         notStarted: total - rowCompleted - rowInProgress,
         pendingRequired,
+        overdue,
       };
     })
-    .sort((a, b) => (b.isRequired ? 1 : 0) - (a.isRequired ? 1 : 0) || b.pendingRequired.length - a.pendingRequired.length);
+    .sort(
+      (a, b) =>
+        (b.isRequiredForAnyone ? 1 : 0) - (a.isRequiredForAnyone ? 1 : 0) ||
+        b.pendingRequired.length - a.pendingRequired.length,
+    );
 
-  const requiredAlerts = trackRows.filter((row) => row.isRequired && row.pendingRequired.length > 0);
+  const requiredAlerts = trackRows.filter((row) => row.isRequiredForAnyone && row.pendingRequired.length > 0);
+  const overdueAlerts = trackRows.filter((row) => row.overdue.length > 0);
 
   if (total === 0) return null;
 
@@ -130,9 +143,24 @@ export function TeamInsights({ users, tracks }: { users: DirectoryUser[]; tracks
         </div>
       </div>
 
-      {(requiredAlerts.length > 0 || neverStarted.length > 0 || inactive.length > 0) && (
+      {(overdueAlerts.length > 0 || requiredAlerts.length > 0 || neverStarted.length > 0 || inactive.length > 0) && (
         <div className="flex flex-col gap-3">
           <p className="font-heading text-sm font-semibold text-foreground">Alertas</p>
+
+          {overdueAlerts.map((row) => (
+            <div key={`overdue-${row.id}`} className="flex items-start gap-3 rounded-xl border border-destructive-border bg-destructive-background p-4">
+              <IconClockExclamation className="mt-0.5 size-4 shrink-0 text-destructive-text" />
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-destructive-text">
+                  Trilha obrigatória atrasada: {row.title}
+                </p>
+                <p className="text-xs text-destructive-text/80">
+                  {row.overdue.length} de {row.totalPeople} estão há mais de {REQUIRED_TRACK_DEADLINE_DAYS} dias sem concluir.
+                </p>
+                <PeopleChip people={row.overdue} />
+              </div>
+            </div>
+          ))}
 
           {requiredAlerts.map((row) => (
             <div key={row.id} className="flex items-start gap-3 rounded-xl border border-destructive-border bg-destructive-background p-4">
@@ -186,7 +214,7 @@ export function TeamInsights({ users, tracks }: { users: DirectoryUser[]; tracks
                 <div className="mb-1.5 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-[13px] font-semibold text-foreground">{row.title}</span>
-                    {row.isRequired && (
+                    {row.isRequiredForAnyone && (
                       <Badge variant="outline" className="shrink-0">
                         Obrigatória
                       </Badge>

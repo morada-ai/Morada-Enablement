@@ -19,7 +19,7 @@ export default async function GerenciarPage() {
       supabase.from("features").select("id, product_id, name").order("position"),
       supabase
         .from("tracks")
-        .select("id, product_id, title, feature_id, owner_name, owner_role, coming_soon")
+        .select("id, product_id, title, feature_id, owner_name, owner_role, coming_soon, track_required_teams(team)")
         .order("position"),
       getRecentPublications(supabase),
       getFeedbackFeed(supabase),
@@ -61,6 +61,7 @@ export default async function GerenciarPage() {
             ownerName: t.owner_name,
             ownerRole: t.owner_role,
             comingSoon: t.coming_soon,
+            requiredTeams: (t.track_required_teams ?? []).map((r: { team: string }) => r.team),
           }))}
         />
         <div className="flex flex-col gap-5">

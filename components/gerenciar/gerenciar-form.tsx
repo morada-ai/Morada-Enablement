@@ -18,6 +18,7 @@ import { createFeature, createTrack, deleteTrack, publishContent, updateTrackMet
 import { CATEGORY_LABELS, CATEGORY_OPTIONS, CONTENT_TYPE_LABELS, CONTENT_TYPE_OPTIONS } from "@/lib/material-tags";
 import { FileUploader, type UploadedFile } from "./file-uploader";
 import { ConfirmDeleteDialog } from "./confirm-delete-dialog";
+import { TeamMultiSelect } from "./team-multiselect";
 
 export type ProductOption = { id: string; name: string };
 export type FeatureOption = { id: string; productId: string; name: string };
@@ -29,6 +30,7 @@ export type TrackOption = {
   ownerName: string | null;
   ownerRole: string | null;
   comingSoon: boolean;
+  requiredTeams: string[];
 };
 
 const NEW_FEATURE_VALUE = "__new_feature__";
@@ -56,7 +58,6 @@ export function GerenciarForm({
   const [category, setCategory] = useState("");
   const [publishToNovidades, setPublishToNovidades] = useState(true);
   const [notifySlack, setNotifySlack] = useState(true);
-  const [isRequired, setIsRequired] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [localFeatures, setLocalFeatures] = useState<FeatureOption[]>([]);
   const [creatingFeature, setCreatingFeature] = useState(false);
@@ -66,6 +67,7 @@ export function GerenciarForm({
   const [ownerRoleDraft, setOwnerRoleDraft] = useState("");
   const [comingSoonDraft, setComingSoonDraft] = useState(false);
   const [featureIdDraft, setFeatureIdDraft] = useState(NO_FEATURE_VALUE);
+  const [requiredTeamsDraft, setRequiredTeamsDraft] = useState<string[]>([]);
   const [isSavingTrackMeta, startSavingTrackMeta] = useTransition();
   const [confirmingTrackDelete, setConfirmingTrackDelete] = useState(false);
   const [localTracks, setLocalTracks] = useState<TrackOption[]>([]);
@@ -97,6 +99,7 @@ export function GerenciarForm({
     setOwnerRoleDraft(selectedTrack.ownerRole ?? "");
     setComingSoonDraft(selectedTrack.comingSoon);
     setFeatureIdDraft(selectedTrack.featureId ?? NO_FEATURE_VALUE);
+    setRequiredTeamsDraft(selectedTrack.requiredTeams);
   }, [selectedTrack]);
 
   function handleSaveTrackMeta() {
@@ -108,6 +111,7 @@ export function GerenciarForm({
           ownerRole: ownerRoleDraft,
           comingSoon: comingSoonDraft,
           featureId: featureIdDraft === NO_FEATURE_VALUE ? null : featureIdDraft,
+          requiredTeams: requiredTeamsDraft,
         });
         toast("Dados da trilha atualizados.");
         router.refresh();
@@ -169,7 +173,7 @@ export function GerenciarForm({
         const created = await createTrack(productId, featureId, newTrackName);
         setLocalTracks((prev) => [
           ...prev,
-          { id: created.id, productId, title: created.name, featureId, ownerName: null, ownerRole: null, comingSoon: true },
+          { id: created.id, productId, title: created.name, featureId, ownerName: null, ownerRole: null, comingSoon: true, requiredTeams: [] },
         ]);
         setTargetId(created.id);
         setCreatingTrack(false);
@@ -191,7 +195,6 @@ export function GerenciarForm({
     setCategory("");
     setPublishToNovidades(true);
     setNotifySlack(true);
-    setIsRequired(false);
   }
 
   function handleSubmit(status: "draft" | "published") {
@@ -223,7 +226,6 @@ export function GerenciarForm({
           status,
           publishToNovidades,
           notifySlack,
-          isRequired,
         });
         toast(status === "published" ? "Publicado no hub." : "Rascunho salvo.");
         resetForm();
@@ -491,6 +493,7 @@ export function GerenciarForm({
               Conecta a trilha aos materiais dessa pasta — aparece um link entre as duas telas.
             </p>
           </div>
+          <TeamMultiSelect value={requiredTeamsDraft} onChange={setRequiredTeamsDraft} />
           <ToggleRow
             label="Trilha em preparação"
             hint="Mostra o aviso 'em preparação' na trilha. Desligue quando o conteúdo estiver pronto de verdade."
@@ -607,14 +610,6 @@ export function GerenciarForm({
           checked={notifySlack}
           onCheckedChange={setNotifySlack}
         />
-        {kind === "lesson" && (
-          <ToggleRow
-            label="Marcar como obrigatório"
-            hint="Sinaliza a trilha como obrigatória para o time."
-            checked={isRequired}
-            onCheckedChange={setIsRequired}
-          />
-        )}
       </div>
 
       <div className="flex justify-end gap-2 border-t border-border pt-4">

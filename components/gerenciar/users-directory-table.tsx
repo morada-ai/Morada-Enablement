@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   Avatar,
   AvatarFallback,
@@ -39,8 +40,13 @@ export function UsersDirectoryTable({ users }: { users: DirectoryUser[] }) {
         {users.map((user) => {
           const teamLabel = user.team && isValidTeam(user.team) ? TEAM_LABELS[user.team] : null;
           return (
-            <TableRow key={user.id}>
+            <TableRow key={user.id} className="relative hover:bg-neutral-50">
               <TableCell className="max-w-[260px]">
+                <Link
+                  href={`/gerenciar/usuarios/${user.id}`}
+                  className="absolute inset-0"
+                  aria-label={`Ver detalhes de ${user.fullName ?? user.email}`}
+                />
                 <div className="flex items-center gap-3">
                   <Avatar>
                     {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}

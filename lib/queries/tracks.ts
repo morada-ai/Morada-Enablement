@@ -34,20 +34,31 @@ export type TrackRow = {
   feature: { id: string; name: string } | null;
   product: Product;
   lessons: LessonRow[];
+  requiredTeams: { team: string; createdAt: string }[];
 };
 
 const TRACK_SELECT = `id, title, description, level, audience, owner_id, owner_name, owner_role, updated_at, content_updated_at, coming_soon, feature_id,
        feature:features!tracks_feature_id_fkey (id, name),
        product:products!tracks_product_id_fkey (id, name, accent, description, position),
-       lessons ( id, track_id, position, title, kind, duration_min, source_label, storage_path, external_url, published_at )`;
+       lessons ( id, track_id, position, title, kind, duration_min, source_label, storage_path, external_url, published_at ),
+       track_required_teams ( team, created_at )`;
+
+type RawTrackRow = Omit<TrackRow, "requiredTeams"> & {
+  track_required_teams: { team: string; created_at: string }[];
+};
+
+function normalizeTrack(raw: RawTrackRow): TrackRow {
+  return {
+    ...raw,
+    lessons: [...raw.lessons].sort((a, b) => a.position - b.position),
+    requiredTeams: raw.track_required_teams.map((r) => ({ team: r.team, createdAt: r.created_at })),
+  };
+}
 
 export async function getTracksWithLessons(supabase: SupabaseClient): Promise<TrackRow[]> {
   const { data } = await supabase.from("tracks").select(TRACK_SELECT).order("position");
 
-  return ((data ?? []) as unknown as TrackRow[]).map((track) => ({
-    ...track,
-    lessons: [...track.lessons].sort((a, b) => a.position - b.position),
-  }));
+  return ((data ?? []) as unknown as RawTrackRow[]).map(normalizeTrack);
 }
 
 export async function getTrackWithLessons(
@@ -61,8 +72,7 @@ export async function getTrackWithLessons(
     .maybeSingle();
 
   if (!data) return null;
-  const track = data as unknown as TrackRow;
-  return { ...track, lessons: [...track.lessons].sort((a, b) => a.position - b.position) };
+  return normalizeTrack(data as unknown as RawTrackRow);
 }
 
 export async function getCompletedLessonIds(
